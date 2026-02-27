@@ -58,11 +58,7 @@ jobs:
       - name: Build (Windows)
         if: runner.os == 'Windows'
         run: |
-          pyinstaller --onefile --windowed --name movie2galagame ^
-            --copy-metadata imageio ^
-            --copy-metadata imageio-ffmpeg ^
-            --copy-metadata moviepy ^
-            main.py
+          pyinstaller --onefile --windowed --name movie2galagame --copy-metadata imageio --copy-metadata imageio-ffmpeg --copy-metadata moviepy main.py
         shell: pwsh
 
       - name: Build (macOS/Linux)
