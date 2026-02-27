@@ -28,6 +28,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set Version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${GITHUB_REF_NAME}" ]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -48,16 +58,47 @@ jobs:
       - name: Build (Windows)
         if: runner.os == 'Windows'
         run: |
-          pyinstaller --onefile --windowed --name movie2galagame main.py
+          pyinstaller --onefile --windowed --name movie2galagame ^
+            --copy-metadata imageio ^
+            --copy-metadata imageio-ffmpeg ^
+            --copy-metadata moviepy ^
+            main.py
         shell: pwsh
 
       - name: Build (macOS/Linux)
         if: runner.os != 'Windows'
         run: |
-          pyinstaller --onefile --windowed --name movie2galagame main.py
+          pyinstaller --onefile --windowed --name movie2galagame \
+            --copy-metadata imageio \
+            --copy-metadata imageio-ffmpeg \
+            --copy-metadata moviepy \
+            main.py
         shell: bash
+
+      - name: Rename Artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.version.outputs.version }}"
+          $src = "dist\\movie2galagame.exe"
+          $dst = "dist\\movie2galagame-windows-$ver.exe"
+          Move-Item -Force $src $dst
+
+      - name: Rename Artifact (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          ver="${{ steps.version.outputs.version }}"
+          mv dist/movie2galagame "dist/movie2galagame-macos-$ver"
+
+      - name: Rename Artifact (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          ver="${{ steps.version.outputs.version }}"
+          mv dist/movie2galagame "dist/movie2galagame-linux-$ver"
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/${{ matrix.artifact_name }}
+          files: dist/*
