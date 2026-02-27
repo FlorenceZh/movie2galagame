@@ -1,80 +1,115 @@
-import statistics
+import os
 import pathlib
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
 
-import pysrt
-from moviepy import VideoFileClip
+from engine import Engine
 
 
-class Engine:
-    __SCRIPT_BLOCK_TEMPLATE = '''
-    show b{id} with dissolve\n
-    voice a{id}\n
-    "{text}"
-    '''
+class App(tk.Tk):
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("movie2galagame")
+        self.geometry("560x320")
+        self.resizable(False, False)
 
-    __SCRIPT_TEMPLATE = '''#该脚本由 https://github.com/FlorenceZh/movie2galagame 生成
-label start:
-{script_block}
-    return
-'''
+        self._video_path = tk.StringVar()
+        self._srt_path = tk.StringVar()
+        self._output_dir = tk.StringVar(value="output")
+        self._progress = None
 
-    def __init__(self, video_path: str, srt_path: str, output_folder: str = 'output') -> None:
-        self.base_path = pathlib.Path(output_folder)
-        self.__video_path = pathlib.Path(video_path)
-        self.__srt_path = pathlib.Path(srt_path)
+        self._build_ui()
 
-        (self.base_path / 'images').mkdir(parents=True, exist_ok=True)
-        (self.base_path / 'audio').mkdir(parents=True, exist_ok=True)
+    def _build_ui(self) -> None:
+        pad = {"padx": 12, "pady": 8}
 
-        self.__subs = pysrt.open(self.__srt_path) # type: ignore
-        self.__script_blocks = []
+        title = tk.Label(self, text="movie2galagame 转换工具", font=("Segoe UI", 14, "bold"))
+        title.pack(**pad)
 
-    def process(self):
-        with VideoFileClip(str(self.__video_path)) as video_clip:
-            for index, sub in enumerate(self.__subs):
-                # 统一单位为秒
-                start = sub.start.ordinal / 1000.0
-                end = sub.end.ordinal / 1000.0
-                
-                self.__process_frame(video_clip, index, start, end)
-                self.__process_audio(video_clip, index, start, end)
-                self.__generate_every_script_block(index, sub)
+        form = tk.Frame(self)
+        form.pack(fill="x", **pad)
 
-            full_script = self.__SCRIPT_TEMPLATE.format(
-                script_block="".join(self.__script_blocks)
-            )
-            
-            # 3. 将 script.rpy 写入 output 文件夹
-            script_file_path = self.base_path / 'script.rpy'
-            with open(script_file_path, mode='w', encoding='utf-8') as f:
-                f.write(full_script)
-            
-            print(f"处理完成！所有文件已保存在: {self.base_path.absolute()}")
+        self._row(form, "视频文件 (.mp4)", self._video_path, self._choose_video)
+        self._row(form, "字幕文件 (.srt)", self._srt_path, self._choose_srt)
+        self._row(form, "输出目录", self._output_dir, self._choose_output)
 
-    def __process_frame(self, clip, current_id: int, start: float, end: float):
-        frame_time = statistics.mean((start, end))
-        # 4. 使用 base_path 拼接路径
-        save_path = self.base_path / "images" / f"b{current_id}.jpg"
-        clip.save_frame(save_path, t=frame_time)
+        actions = tk.Frame(self)
+        actions.pack(fill="x", **pad)
 
-    def __process_audio(self, clip, current_id: int, start: float, end: float):
-        # 修正：moviepy 的 subclipped 接受秒为单位
-        audio_clip = clip.audio.subclipped(start, end)
-        try:
-            # 5. 使用 base_path 拼接路径
-            save_path = self.base_path / "audio" / f"a{current_id}.mp3"
-            audio_clip.write_audiofile(save_path, logger=None)
-        except Exception as e:
-            print(f'警告：索引 {current_id} 音频提取失败: {e}')
+        self._run_btn = tk.Button(actions, text="开始转换", command=self._run, width=16)
+        self._run_btn.pack(side="right")
 
-    def __generate_every_script_block(self, current_id: int, sub):
-        code_block = self.__SCRIPT_BLOCK_TEMPLATE.format(
-            id=current_id, 
-            text=sub.text.replace('\n', ' ')
+        self._progress = ttk.Progressbar(actions, mode="indeterminate")
+        self._progress.pack(side="left", fill="x", expand=True, padx=6)
+
+        hint = tk.Label(self, text="提示：请先选择视频与字幕文件，再开始转换。")
+        hint.pack(**pad)
+
+    def _row(self, parent, label_text, var, browse_cmd) -> None:
+        row = tk.Frame(parent)
+        row.pack(fill="x", pady=6)
+
+        label = tk.Label(row, text=label_text, width=14, anchor="w")
+        label.pack(side="left")
+
+        entry = tk.Entry(row, textvariable=var)
+        entry.pack(side="left", fill="x", expand=True, padx=6)
+
+        btn = tk.Button(row, text="浏览", command=browse_cmd, width=8)
+        btn.pack(side="right")
+
+    def _choose_video(self) -> None:
+        start_dir = os.getcwd()
+        path = filedialog.askopenfilename(
+            title="选择视频文件",
+            filetypes=[("视频文件", "*.mp4"), ("所有文件", "*.*")],
+            initialdir=start_dir,
         )
-        self.__script_blocks.append(code_block)
+        if path:
+            self._video_path.set(path)
+
+    def _choose_srt(self) -> None:
+        start_dir = os.getcwd()
+        path = filedialog.askopenfilename(
+            title="选择字幕文件",
+            filetypes=[("字幕文件", "*.srt"), ("所有文件", "*.*")],
+            initialdir=start_dir,
+        )
+        if path:
+            self._srt_path.set(path)
+
+    def _choose_output(self) -> None:
+        path = filedialog.askdirectory(title="选择输出目录")
+        if path:
+            self._output_dir.set(path)
+
+    def _run(self) -> None:
+        video = self._video_path.get().strip()
+        srt = self._srt_path.get().strip()
+        out_dir = self._output_dir.get().strip() or "output"
+
+        if not video or not srt:
+            messagebox.showwarning("缺少文件", "请先选择视频文件和字幕文件。")
+            return
+
+        self._run_btn.config(state="disabled")
+        self._progress.start(8)
+        self.update_idletasks()
+        try:
+            engine = Engine(video, srt, output_folder=out_dir)
+            engine.process()
+        except Exception as exc:
+            self._progress.stop()
+            self._run_btn.config(state="normal")
+            messagebox.showerror("转换失败", f"发生错误：{exc}")
+            return
+
+        self._progress.stop()
+        self._run_btn.config(state="normal")
+        output_path = pathlib.Path(out_dir).resolve()
+        messagebox.showinfo("完成", f"转换完成，输出目录：\n{output_path}")
 
 
-if __name__ == '__main__':
-    engine = Engine('测试-新海诚_十字路口.mp4', '测试-新海诚_十字路口.srt', output_folder='output')
-    engine.process()
+if __name__ == "__main__":
+    app = App()
+    app.mainloop()
