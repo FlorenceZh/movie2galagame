@@ -1,2 +1,4 @@
 moviepy==2.2.1
 pysrt==1.1.2
+rapidocr-onnxruntime==1.4.4
+opencv-python>=4.6.0

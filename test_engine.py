@@ -4,10 +4,10 @@ import pytest
 
 from engine import Engine
 
-def test_engine_with_srt_extraction(tmp_path):
-    # This assumes `测试-带有字幕.mkv` exists in the repo root
-    # and has a subtitle track.
-    video_path = pathlib.Path('测试-带有字幕.mkv').resolve()
+def test_engine_with_ocr_extraction(tmp_path):
+    # This assumes `测试-新海诚_十字路口.mp4` exists in the repo root
+    # and has a hardcoded subtitle track.
+    video_path = pathlib.Path('测试-新海诚_十字路口.mp4').resolve()
 
     # Check if the test file actually exists; if not, just skip the test.
     if not video_path.exists():
@@ -22,6 +22,12 @@ def test_engine_with_srt_extraction(tmp_path):
     extracted_srt = output_dir / "extracted.srt"
     assert extracted_srt.exists()
     assert extracted_srt.stat().st_size > 0
+
+    # Verify the contents of extracted srt are somewhat populated
+    with open(extracted_srt, 'r', encoding='utf-8') as f:
+        content = f.read()
+        # Should contain standard SRT formatting things like "-->"
+        assert "-->" in content
 
     # Process the video
     engine.process()
