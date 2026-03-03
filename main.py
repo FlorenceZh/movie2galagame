@@ -58,30 +58,34 @@ class App(tk.Tk):
         btn = tk.Button(row, text="浏览", command=browse_cmd, width=8)
         btn.pack(side="right")
 
-    def _choose_video(self) -> None:
-        start_dir = os.getcwd()
-        path = filedialog.askopenfilename(
-            title="选择视频文件",
-            filetypes=[("视频文件", "*.mp4"), ("所有文件", "*.*")],
-            initialdir=start_dir,
-        )
+    def _pick_path(self, var, title, is_dir=False, filetypes=None) -> None:
+        if is_dir:
+            path = filedialog.askdirectory(title=title)
+        else:
+            path = filedialog.askopenfilename(
+                title=title,
+                filetypes=filetypes,
+                initialdir=os.getcwd(),
+            )
         if path:
-            self._video_path.set(path)
+            var.set(path)
+
+    def _choose_video(self) -> None:
+        self._pick_path(
+            self._video_path,
+            "选择视频文件",
+            filetypes=[("视频文件", "*.mp4"), ("所有文件", "*.*")],
+        )
 
     def _choose_srt(self) -> None:
-        start_dir = os.getcwd()
-        path = filedialog.askopenfilename(
-            title="选择字幕文件",
+        self._pick_path(
+            self._srt_path,
+            "选择字幕文件",
             filetypes=[("字幕文件", "*.srt"), ("所有文件", "*.*")],
-            initialdir=start_dir,
         )
-        if path:
-            self._srt_path.set(path)
 
     def _choose_output(self) -> None:
-        path = filedialog.askdirectory(title="选择输出目录")
-        if path:
-            self._output_dir.set(path)
+        self._pick_path(self._output_dir, "选择输出目录", is_dir=True)
 
     def _run(self) -> None:
         video = self._video_path.get().strip()

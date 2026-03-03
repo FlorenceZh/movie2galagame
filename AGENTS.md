@@ -32,11 +32,10 @@ Outputs are written to `output/images/`, `output/audio/`, and `output/script.rpy
 - Keep file paths as `pathlib.Path` where possible (already used in `main.py`).
 
 ## Testing Guidelines
-There is no automated test suite yet. If you add tests:
+There is an automated test suite.
 
-- Prefer `pytest`.
 - Place tests under `tests/` and name them `test_*.py`.
-- Document how to run them (e.g., `pytest`) in this file and in `README.md`.
+- Run them using: `python3 -m unittest discover tests`
 
 ## Commit & Pull Request Guidelines
 Recent commit messages are short and direct (e.g., "Update README.md", "Create ffmpeg.exe").
