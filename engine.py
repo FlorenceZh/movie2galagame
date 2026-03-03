@@ -1,7 +1,32 @@
 import pathlib
+import subprocess
+import datetime
 
+import cv2
 import pysrt
+from rapidocr_onnxruntime import RapidOCR
 from moviepy import VideoFileClip
+
+
+def format_time(seconds: float) -> str:
+    """将秒数格式化为 SRT 的时间字符串：HH:MM:SS,mmm"""
+    delta = datetime.timedelta(seconds=seconds)
+    hours, remainder = divmod(delta.seconds, 3600)
+    minutes, seconds_int = divmod(remainder, 60)
+    milliseconds = int(delta.microseconds / 1000)
+    return f"{hours:02d}:{minutes:02d}:{seconds_int:02d},{milliseconds:03d}"
+
+def calculate_similarity(s1: str, s2: str) -> float:
+    """计算两个字符串的简单相似度，判断是否为同一段字幕"""
+    if not s1 and not s2:
+        return 1.0
+    if not s1 or not s2:
+        return 0.0
+    # 采用 Jaccard 相似度简单实现
+    set1, set2 = set(s1), set(s2)
+    intersection = len(set1 & set2)
+    union = len(set1 | set2)
+    return intersection / union if union > 0 else 0.0
 
 
 class Engine:
@@ -17,16 +42,100 @@ label start:
     return
 '''
 
-    def __init__(self, video_path: str, srt_path: str, output_folder: str = 'output') -> None:
+    def __init__(self, video_path: str, srt_path: str = None, output_folder: str = 'output') -> None:
         self.base_path = pathlib.Path(output_folder)
         self.__video_path = pathlib.Path(video_path)
-        self.__srt_path = pathlib.Path(srt_path)
 
         (self.base_path / 'images').mkdir(parents=True, exist_ok=True)
         (self.base_path / 'audio').mkdir(parents=True, exist_ok=True)
 
+        if not srt_path:
+            self.__srt_path = self.base_path / 'extracted.srt'
+            # 1. 尝试使用 ffmpeg 提取内嵌字幕
+            cmd = ['ffmpeg', '-y', '-i', str(self.__video_path), '-map', '0:s:0', str(self.__srt_path)]
+            try:
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                pass
+
+            # 2. 如果提取失败或文件为空，回退到 OCR 提取硬字幕
+            if not self.__srt_path.exists() or self.__srt_path.stat().st_size == 0:
+                print("未检测到内嵌字幕，正在使用 OCR 提取硬字幕，请耐心等待...")
+                self.__extract_hard_subtitles(str(self.__video_path), str(self.__srt_path))
+        else:
+            self.__srt_path = pathlib.Path(srt_path)
+
         self.__subs = pysrt.open(self.__srt_path) # type: ignore
         self.__script_blocks = []
+
+    def __extract_hard_subtitles(self, video_path: str, output_srt: str):
+        cap = cv2.VideoCapture(video_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # 为了提高效率，我们每半秒采样一次
+        sample_interval = max(1, int(fps / 2))
+
+        engine = RapidOCR()
+
+        subtitles = []
+        current_sub = None
+
+        frame_idx = 0
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            if frame_idx % sample_interval == 0:
+                h, w, _ = frame.shape
+                # 截取底部 30% 画面
+                crop = frame[int(h * 0.7):h, 0:w]
+                result, _ = engine(crop)
+
+                text = ""
+                if result:
+                    # 组合识别出的所有文本块
+                    text = " ".join([res[1] for res in result]).strip()
+
+                current_time = frame_idx / fps
+
+                if text:
+                    # 存在字幕文本
+                    if current_sub is None:
+                        # 新字幕块
+                        current_sub = {'text': text, 'start': current_time, 'end': current_time + (sample_interval / fps)}
+                    else:
+                        # 检查相似度决定是否合并
+                        if calculate_similarity(current_sub['text'], text) > 0.6:
+                            current_sub['end'] = current_time + (sample_interval / fps)
+                            # 如果新的文本更长，可能识别更完整，更新文本
+                            if len(text) > len(current_sub['text']):
+                                current_sub['text'] = text
+                        else:
+                            # 相似度过低，认为是新字幕
+                            subtitles.append(current_sub)
+                            current_sub = {'text': text, 'start': current_time, 'end': current_time + (sample_interval / fps)}
+                else:
+                    # 不存在字幕文本，闭合当前的字幕块
+                    if current_sub is not None:
+                        subtitles.append(current_sub)
+                        current_sub = None
+            frame_idx += 1
+
+        if current_sub is not None:
+            subtitles.append(current_sub)
+
+        cap.release()
+
+        # 写入 SRT 文件
+        with open(output_srt, 'w', encoding='utf-8') as f:
+            for idx, sub in enumerate(subtitles, start=1):
+                start_str = format_time(sub['start'])
+                end_str = format_time(sub['end'])
+                f.write(f"{idx}\n")
+                f.write(f"{start_str} --> {end_str}\n")
+                f.write(f"{sub['text']}\n\n")
 
     def process(self):
         with VideoFileClip(str(self.__video_path)) as video_clip:

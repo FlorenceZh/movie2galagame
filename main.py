@@ -42,7 +42,7 @@ class App(tk.Tk):
         self._progress = ttk.Progressbar(actions, mode="indeterminate")
         self._progress.pack(side="left", fill="x", expand=True, padx=6)
 
-        hint = tk.Label(self, text="提示：请先选择视频与字幕文件，再开始转换。")
+        hint = tk.Label(self, text="提示：请先选择视频文件（字幕可选），再开始转换。")
         hint.pack(**pad)
 
     def _row(self, parent, label_text, var, browse_cmd) -> None:
@@ -88,15 +88,15 @@ class App(tk.Tk):
         srt = self._srt_path.get().strip()
         out_dir = self._output_dir.get().strip() or "output"
 
-        if not video or not srt:
-            messagebox.showwarning("缺少文件", "请先选择视频文件和字幕文件。")
+        if not video:
+            messagebox.showwarning("缺少文件", "请先选择视频文件。")
             return
 
         self._run_btn.config(state="disabled")
         self._progress.start(8)
         self.update_idletasks()
         try:
-            engine = Engine(video, srt, output_folder=out_dir)
+            engine = Engine(video, srt if srt else None, output_folder=out_dir)
             engine.process()
         except Exception as exc:
             self._progress.stop()
