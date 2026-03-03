@@ -1,5 +1,6 @@
 import statistics
 import pathlib
+import subprocess
 
 import pysrt
 from moviepy import VideoFileClip
@@ -18,13 +19,24 @@ label start:
     return
 '''
 
-    def __init__(self, video_path: str, srt_path: str, output_folder: str = 'output') -> None:
+    def __init__(self, video_path: str, srt_path: str = None, output_folder: str = 'output') -> None:
         self.base_path = pathlib.Path(output_folder)
         self.__video_path = pathlib.Path(video_path)
-        self.__srt_path = pathlib.Path(srt_path)
 
         (self.base_path / 'images').mkdir(parents=True, exist_ok=True)
         (self.base_path / 'audio').mkdir(parents=True, exist_ok=True)
+
+        if not srt_path:
+            self.__srt_path = self.base_path / 'extracted.srt'
+            cmd = ['ffmpeg', '-y', '-i', str(self.__video_path), '-map', '0:s:0', str(self.__srt_path)]
+            try:
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except subprocess.CalledProcessError:
+                raise ValueError("无法从视频中提取字幕")
+            if not self.__srt_path.exists() or self.__srt_path.stat().st_size == 0:
+                raise ValueError("无法从视频中提取字幕")
+        else:
+            self.__srt_path = pathlib.Path(srt_path)
 
         self.__subs = pysrt.open(self.__srt_path) # type: ignore
         self.__script_blocks = []
