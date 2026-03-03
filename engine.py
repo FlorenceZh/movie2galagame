@@ -1,4 +1,3 @@
-import statistics
 import pathlib
 
 import pysrt
@@ -52,7 +51,7 @@ label start:
             print(f"处理完成！所有文件已保存在: {self.base_path.absolute()}")
 
     def __process_frame(self, clip, current_id: int, start: float, end: float):
-        frame_time = statistics.mean((start, end))
+        frame_time = (start + end) / 2.0
         # 4. 使用 base_path 拼接路径
         save_path = self.base_path / "images" / f"b{current_id}.jpg"
         clip.save_frame(save_path, t=frame_time)
